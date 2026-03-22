@@ -100,6 +100,19 @@ func (r *Registry) FindByPlayer(playerJID types.JID) *GameState {
 	return nil
 }
 
+func (r *Registry) FindByAnyPlayer(playerJIDs ...types.JID) *GameState {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, state := range r.games {
+		if state.HasPlayerAny(playerJIDs...) {
+			return state
+		}
+	}
+
+	return nil
+}
+
 func (r *Registry) SetBotsEnabled(groupJID types.JID, enabled bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -225,6 +238,21 @@ func (g *GameState) HasPlayer(jid types.JID) bool {
 	return g.HasPlayerKey(NormalizeJID(jid))
 }
 
+func (g *GameState) HasPlayerAny(jids ...types.JID) bool {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	for _, jid := range jids {
+		if jid.IsEmpty() {
+			continue
+		}
+		if _, ok := g.Players[NormalizeJID(jid)]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 func (g *GameState) HasPlayerKey(key string) bool {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -234,6 +262,21 @@ func (g *GameState) HasPlayerKey(key string) bool {
 
 func (g *GameState) GetPlayer(jid types.JID) *models.Player {
 	return g.GetPlayerByKey(NormalizeJID(jid))
+}
+
+func (g *GameState) GetPlayerAny(jids ...types.JID) *models.Player {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	for _, jid := range jids {
+		if jid.IsEmpty() {
+			continue
+		}
+		if player := g.Players[NormalizeJID(jid)]; player != nil {
+			return player
+		}
+	}
+	return nil
 }
 
 func (g *GameState) GetPlayerByKey(key string) *models.Player {
@@ -439,6 +482,31 @@ func (g *GameState) ResolveTarget(raw string, mentions []types.JID, aliveOnly bo
 	default:
 		return nil, fmt.Errorf("%q matches multiple players", query)
 	}
+}
+
+func (g *GameState) AvailableTargetNames(actor *models.Player) []string {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	names := make([]string, 0, len(g.joinOrder))
+	for _, key := range g.joinOrder {
+		player := g.Players[key]
+		if !player.Alive {
+			continue
+		}
+		switch actor.Role {
+		case models.RoleMafia:
+			if player.Role == models.RoleMafia {
+				continue
+			}
+		case models.RolePolice:
+			if actor.JID.ToNonAD() == player.JID.ToNonAD() {
+				continue
+			}
+		}
+		names = append(names, player.Name)
+	}
+	return names
 }
 
 func (g *GameState) matchKeyLocked(key string, aliveOnly bool) *models.Player {

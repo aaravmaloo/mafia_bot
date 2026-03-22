@@ -30,7 +30,7 @@ func StartNight(state *GameState, duration time.Duration, prefix string) PhaseBu
 
 	bundle := PhaseBundle{
 		Phase:     models.PhaseNight,
-		GroupText: "🌙 Night phase has started. Keep the group quiet and send night actions in DM.",
+		GroupText: "━━━━━━━━━━━━━━━━━━━━\n🌙 NIGHT PHASE\nKeep the group quiet.\nSend night actions in DM.\n━━━━━━━━━━━━━━━━━━━━",
 		Duration:  duration,
 	}
 
@@ -51,14 +51,23 @@ func StartNight(state *GameState, duration time.Duration, prefix string) PhaseBu
 		var text string
 		switch player.Role {
 		case models.RoleMafia:
-			text = fmt.Sprintf("🔪 Night phase! Who do you kill?\n%skill @player", prefix)
+			text = fmt.Sprintf("🌙 Night phase\n🔪 Who do you kill?\nCommand: %skill @player", prefix)
 			text += "\nYour team: " + mafiaTeamLine(player.Name, mafiaNames)
+			if names := availableNamesForRoleLocked(state, key); len(names) > 0 {
+				text += "\nAvailable names: " + strings.Join(names, ", ")
+			}
 		case models.RoleDoctor:
-			text = fmt.Sprintf("💊 Night phase! Who do you save?\n%ssave @player", prefix)
+			text = fmt.Sprintf("🌙 Night phase\n💊 Who do you save?\nCommand: %ssave @player", prefix)
+			if names := availableNamesForRoleLocked(state, key); len(names) > 0 {
+				text += "\nAvailable names: " + strings.Join(names, ", ")
+			}
 		case models.RolePolice:
-			text = fmt.Sprintf("🔍 Night phase! Who do you investigate?\n%sinvestigate @player", prefix)
+			text = fmt.Sprintf("🌙 Night phase\n🔍 Who do you investigate?\nCommand: %sinvestigate @player", prefix)
+			if names := availableNamesForRoleLocked(state, key); len(names) > 0 {
+				text += "\nAvailable names: " + strings.Join(names, ", ")
+			}
 		default:
-			text = "😴 Go to sleep... (no night action)"
+			text = "🌙 Night phase\n😴 Go to sleep... (no night action)"
 		}
 
 		bundle.DMs = append(bundle.DMs, DirectMessage{RecipientKey: key, Text: text})
@@ -75,7 +84,7 @@ func StartDay(state *GameState, opening string, duration time.Duration, prefix s
 	state.resetDayStateLocked()
 
 	if strings.TrimSpace(opening) == "" {
-		opening = fmt.Sprintf("☀️ Day phase has started. Debate, accuse, and nominate with %snominate @player.", prefix)
+		opening = fmt.Sprintf("━━━━━━━━━━━━━━━━━━━━\n☀️ DAY PHASE\nDebate, accuse, and nominate.\nCommand: %snominate @player\n━━━━━━━━━━━━━━━━━━━━", prefix)
 	}
 
 	return PhaseBundle{
@@ -100,10 +109,10 @@ func StartTrial(state *GameState, targetKey string, duration time.Duration) (Pha
 
 	bundle := PhaseBundle{
 		Phase:     models.PhaseTrial,
-		GroupText: fmt.Sprintf("⚖️ %s is on trial. They have 60 seconds to defend themselves.", target.Name),
+		GroupText: fmt.Sprintf("━━━━━━━━━━━━━━━━━━━━\n⚖️ TRIAL\n%s is on trial.\nThey have 60 seconds to defend themselves.\n━━━━━━━━━━━━━━━━━━━━", target.Name),
 		Duration:  duration,
 		DMs: []DirectMessage{
-			{RecipientKey: targetKey, Text: "⚖️ You are on trial! 60 seconds to defend yourself."},
+			{RecipientKey: targetKey, Text: "━━━━━━━━━━━━━━━━━━━━\n⚖️ You are on trial.\nYou have 60 seconds to defend yourself.\n━━━━━━━━━━━━━━━━━━━━"},
 		},
 	}
 	return bundle, nil
@@ -124,7 +133,7 @@ func StartVoting(state *GameState, duration time.Duration, prefix string) PhaseB
 
 	return PhaseBundle{
 		Phase:     models.PhaseVoting,
-		GroupText: fmt.Sprintf("🗳️ Voting time. Decide %s's fate with %sguilty or %snotguilty.", name, prefix, prefix),
+		GroupText: fmt.Sprintf("━━━━━━━━━━━━━━━━━━━━\n🗳️ VOTING\nDecide %s's fate.\nCommands: %sguilty / %snotguilty\n━━━━━━━━━━━━━━━━━━━━", name, prefix, prefix),
 		Duration:  duration,
 	}
 }
@@ -134,7 +143,10 @@ func EndGame(state *GameState, outcome string) PhaseBundle {
 	defer state.mu.Unlock()
 
 	state.Game.Phase = models.PhaseEnded
-	lines := []string{fmt.Sprintf("🏆 Game over! %s", strings.TrimSpace(outcome))}
+	lines := []string{
+		"━━━━━━━━━━━━━━━━━━━━",
+		fmt.Sprintf("🏆 GAME OVER\n%s", strings.TrimSpace(outcome)),
+	}
 	for _, key := range state.joinOrder {
 		player := state.Players[key]
 		status := "alive"
@@ -146,6 +158,6 @@ func EndGame(state *GameState, outcome string) PhaseBundle {
 
 	return PhaseBundle{
 		Phase:     models.PhaseEnded,
-		GroupText: strings.Join(lines, "\n"),
+		GroupText: strings.Join(append(lines, "━━━━━━━━━━━━━━━━━━━━"), "\n"),
 	}
 }

@@ -114,11 +114,14 @@ func (s *Service) StartLobby(ctx context.Context, msg InboundMessage) error {
 	log.Printf("lobby opened group=%s host=%s", state.Game.GroupJID, msg.SenderJID)
 
 	announcement := strings.Join([]string{
-		fmt.Sprintf("🎭 Mafia lobby opened by %s.", nameForDisplay(msg.PushName, msg.SenderJID.User)),
-		fmt.Sprintf("Need at least %d players.", s.cfg.MinPlayers),
-		fmt.Sprintf("Use %s to enter the game.", formatCommand(s.cfg.Prefix, "join")),
-		fmt.Sprintf("Use %s or %s to toggle bot seats.", formatCommand(s.cfg.Prefix, "bots enable"), formatCommand(s.cfg.Prefix, "bots disable")),
-		fmt.Sprintf("Host uses %s when everyone's in.", formatCommand(s.cfg.Prefix, "begin")),
+		"━━━━━━━━━━━━━━━━━━━━",
+		"🎭 MAFIA LOBBY",
+		fmt.Sprintf("Host: %s", nameForDisplay(msg.PushName, msg.SenderJID.User)),
+		fmt.Sprintf("Minimum players: %d", s.cfg.MinPlayers),
+		fmt.Sprintf("Join: %s", formatCommand(s.cfg.Prefix, "join")),
+		fmt.Sprintf("Bot seats: %s / %s", formatCommand(s.cfg.Prefix, "bots enable"), formatCommand(s.cfg.Prefix, "bots disable")),
+		fmt.Sprintf("Start: %s", formatCommand(s.cfg.Prefix, "begin")),
+		"━━━━━━━━━━━━━━━━━━━━",
 	}, "\n")
 
 	return s.applyBundle(ctx, state, game.PhaseBundle{
@@ -134,7 +137,7 @@ func (s *Service) JoinLobby(ctx context.Context, state *game.GameState, msg Inbo
 	}
 	log.Printf("player joined group=%s player=%s total=%d", state.Game.GroupJID, player.Name, state.PlayerCount())
 
-	return s.messenger.SendGroup(ctx, state.Game.GroupJID, fmt.Sprintf("%s joined the lobby. Players: %d", player.Name, state.PlayerCount()))
+	return s.messenger.SendGroup(ctx, state.Game.GroupJID, fmt.Sprintf("✅ %s joined the lobby.\nSeats filled: %d", player.Name, state.PlayerCount()))
 }
 
 func (s *Service) BeginGame(ctx context.Context, state *game.GameState) error {
@@ -156,7 +159,7 @@ func (s *Service) BeginGame(ctx context.Context, state *game.GameState) error {
 		}
 	}
 
-	if err := s.messenger.SendGroup(ctx, state.Game.GroupJID, "Roles are out. Check your DMs."); err != nil {
+	if err := s.messenger.SendGroup(ctx, state.Game.GroupJID, "━━━━━━━━━━━━━━━━━━━━\n🎲 Roles are out. Check your DMs.\n━━━━━━━━━━━━━━━━━━━━"); err != nil {
 		return err
 	}
 

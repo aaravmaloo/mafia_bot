@@ -71,10 +71,14 @@ func RoleRevealMessages(state *GameState) []DirectMessage {
 
 	for _, key := range state.joinOrder {
 		player := state.Players[key]
-		text := fmt.Sprintf("🎭 You are %s. %s", player.Role, RoleDescription(player.Role))
+		text := fmt.Sprintf("━━━━━━━━━━━━━━━━━━━━\n🎭 ROLE: %s\n%s", player.Role, RoleDescription(player.Role))
 		if player.Role == models.RoleMafia {
 			text = text + "\nYour team: " + mafiaTeamLine(player.Name, mafiaNames)
 		}
+		if targets := availableNamesForRoleLocked(state, key); len(targets) > 0 {
+			text += "\nAvailable names: " + strings.Join(targets, ", ")
+		}
+		text += "\n━━━━━━━━━━━━━━━━━━━━"
 		messages = append(messages, DirectMessage{RecipientKey: key, Text: text})
 	}
 
@@ -113,4 +117,34 @@ func mafiaTeamLine(self string, team []string) string {
 		return "just you"
 	}
 	return strings.Join(others, ", ")
+}
+
+func availableNamesForRoleLocked(state *GameState, actorKey string) []string {
+	actor := state.Players[actorKey]
+	if actor == nil {
+		return nil
+	}
+
+	names := make([]string, 0, len(state.joinOrder))
+	for _, key := range state.joinOrder {
+		player := state.Players[key]
+		if !player.Alive {
+			continue
+		}
+		switch actor.Role {
+		case models.RoleMafia:
+			if player.Role == models.RoleMafia {
+				continue
+			}
+		case models.RolePolice:
+			if player.JID.ToNonAD() == actor.JID.ToNonAD() {
+				continue
+			}
+		case models.RoleDoctor:
+		default:
+			continue
+		}
+		names = append(names, player.Name)
+	}
+	return names
 }

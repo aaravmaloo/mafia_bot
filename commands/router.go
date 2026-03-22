@@ -19,13 +19,14 @@ type Messenger interface {
 }
 
 type InboundMessage struct {
-	ChatJID   types.JID
-	SenderJID types.JID
-	MessageID types.MessageID
-	PushName  string
-	Text      string
-	IsGroup   bool
-	Mentions  []types.JID
+	ChatJID          types.JID
+	SenderJID        types.JID
+	SenderAlternates []types.JID
+	MessageID        types.MessageID
+	PushName         string
+	Text             string
+	IsGroup          bool
+	Mentions         []types.JID
 }
 
 type Router struct {
@@ -148,11 +149,11 @@ func (r *Router) replyError(ctx context.Context, msg InboundMessage, text string
 }
 
 func (r *Router) lookupPlayerGame(msg InboundMessage) (*game.GameState, *models.Player) {
-	state := r.games.FindByPlayer(msg.SenderJID)
+	state := r.games.FindByAnyPlayer(append([]types.JID{msg.SenderJID}, msg.SenderAlternates...)...)
 	if state == nil {
 		return nil, nil
 	}
-	return state, state.GetPlayer(msg.SenderJID)
+	return state, state.GetPlayerAny(append([]types.JID{msg.SenderJID}, msg.SenderAlternates...)...)
 }
 
 func formatCommand(prefix, name string) string {

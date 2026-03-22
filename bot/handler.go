@@ -82,29 +82,31 @@ func (h *Handler) handleMessage(evt *events.Message) {
 	log.Printf("incoming message chat=%s sender=%s group=%t text=%q", evt.Info.Chat, evt.Info.Sender, evt.Info.IsGroup, text)
 
 	inbound := commands.InboundMessage{
-		ChatJID:   evt.Info.Chat,
-		SenderJID: evt.Info.Sender,
-		MessageID: evt.Info.ID,
-		PushName:  evt.Info.PushName,
-		Text:      text,
-		IsGroup:   evt.Info.IsGroup,
-		Mentions:  extractMentions(evt.Message),
+		ChatJID:          evt.Info.Chat,
+		SenderJID:        evt.Info.Sender,
+		SenderAlternates: extractSenderAlternates(evt),
+		MessageID:        evt.Info.ID,
+		PushName:         evt.Info.PushName,
+		Text:             text,
+		IsGroup:          evt.Info.IsGroup,
+		Mentions:         extractMentions(evt.Message),
 	}
 	h.router.HandleMessage(context.Background(), inbound)
 }
 
 func (h *Handler) shouldBlockDeadPlayer(evt *events.Message) bool {
 	var state *game.GameState
+	aliases := append([]types.JID{evt.Info.Sender}, extractSenderAlternates(evt)...)
 	if evt.Info.IsGroup {
 		state = h.games.Get(evt.Info.Chat)
 	} else {
-		state = h.games.FindByPlayer(evt.Info.Sender)
+		state = h.games.FindByAnyPlayer(aliases...)
 	}
 	if state == nil {
 		return false
 	}
 
-	player := state.GetPlayer(evt.Info.Sender)
+	player := state.GetPlayerAny(aliases...)
 	if player == nil || player.Alive {
 		return false
 	}
@@ -114,6 +116,17 @@ func (h *Handler) shouldBlockDeadPlayer(evt *events.Message) bool {
 		_ = h.sender.DeleteMsg(context.Background(), evt.Info.Chat, evt.Info.Sender, evt.Info.ID)
 	}
 	return true
+}
+
+func extractSenderAlternates(evt *events.Message) []types.JID {
+	alts := make([]types.JID, 0, 2)
+	if !evt.Info.SenderAlt.IsEmpty() {
+		alts = append(alts, evt.Info.SenderAlt)
+	}
+	if !evt.Info.RecipientAlt.IsEmpty() {
+		alts = append(alts, evt.Info.RecipientAlt)
+	}
+	return alts
 }
 
 func extractText(message *waProto.Message) string {

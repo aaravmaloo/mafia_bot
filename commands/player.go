@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	"mafia-bot/game"
 	"mafia-bot/models"
@@ -29,7 +30,7 @@ func (r *Router) routeKill(ctx context.Context, msg InboundMessage, args string)
 
 	target, err := state.ResolveTarget(args, msg.Mentions, true)
 	if err != nil {
-		r.replyError(ctx, msg, err.Error())
+		r.replyError(ctx, msg, err.Error()+targetHelp(state, player))
 		return
 	}
 	if target.Role == models.RoleMafia {
@@ -62,7 +63,7 @@ func (r *Router) routeSave(ctx context.Context, msg InboundMessage, args string)
 
 	target, err := state.ResolveTarget(args, msg.Mentions, true)
 	if err != nil {
-		r.replyError(ctx, msg, err.Error())
+		r.replyError(ctx, msg, err.Error()+targetHelp(state, player))
 		return
 	}
 
@@ -91,7 +92,7 @@ func (r *Router) routeInvestigate(ctx context.Context, msg InboundMessage, args 
 
 	target, err := state.ResolveTarget(args, msg.Mentions, true)
 	if err != nil {
-		r.replyError(ctx, msg, err.Error())
+		r.replyError(ctx, msg, err.Error()+targetHelp(state, player))
 		return
 	}
 
@@ -125,7 +126,7 @@ func (r *Router) routeNominate(ctx context.Context, msg InboundMessage, args str
 
 	target, err := state.ResolveTarget(args, msg.Mentions, true)
 	if err != nil {
-		r.replyError(ctx, msg, err.Error())
+		r.replyError(ctx, msg, err.Error()+targetHelp(state, player))
 		return
 	}
 	if target.JID.ToNonAD() == player.JID.ToNonAD() {
@@ -385,4 +386,15 @@ func (s *Service) endGame(ctx context.Context, state *game.GameState, winner str
 	log.Printf("game over group=%s winner=%s", state.Game.GroupJID, winner)
 	_ = s.applyBundle(ctx, state, game.EndGame(state, fmt.Sprintf("%s win.", game.WinnerLabel(winner))))
 	s.games.Delete(state.Game.GroupJID)
+}
+
+func targetHelp(state *game.GameState, actor *models.Player) string {
+	if state == nil || actor == nil {
+		return ""
+	}
+	names := state.AvailableTargetNames(actor)
+	if len(names) == 0 {
+		return ""
+	}
+	return "\nAvailable names: " + strings.Join(names, ", ")
 }
