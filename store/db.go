@@ -3,6 +3,10 @@ package store
 import (
 	"context"
 	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 	waStore "go.mau.fi/whatsmeow/store"
@@ -11,9 +15,15 @@ import (
 )
 
 func OpenDeviceStore(ctx context.Context, driver, dsn, logLevel string) (*sqlstore.Container, *waStore.Device, error) {
-	dbLog := waLog.Stdout("Database", logLevel, true)
+	resolvedDSN, err := resolveDSN(driver, dsn)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolve session database path: %w", err)
+	}
 
-	container, err := sqlstore.New(ctx, driver, dsn, dbLog)
+	dbLog := waLog.Stdout("Database", logLevel, true)
+	log.Printf("opening whatsmeow store driver=%s dsn=%q", driver, resolvedDSN)
+
+	container, err := sqlstore.New(ctx, driver, resolvedDSN, dbLog)
 	if err != nil {
 		return nil, nil, fmt.Errorf("open session database: %w", err)
 	}
@@ -25,4 +35,43 @@ func OpenDeviceStore(ctx context.Context, driver, dsn, logLevel string) (*sqlsto
 	}
 
 	return container, deviceStore, nil
+}
+
+func resolveDSN(driver, dsn string) (string, error) {
+	if strings.TrimSpace(driver) != "sqlite3" {
+		return dsn, nil
+	}
+
+	trimmed := strings.TrimSpace(dsn)
+	if trimmed == "" {
+		trimmed = "mafia-bot.db?_foreign_keys=on"
+	}
+	if trimmed == ":memory:" || strings.Contains(trimmed, "mode=memory") {
+		return trimmed, nil
+	}
+
+	filename := trimmed
+	query := ""
+	if idx := strings.Index(trimmed, "?"); idx >= 0 {
+		filename = trimmed[:idx]
+		query = trimmed[idx+1:]
+	}
+	filename = strings.TrimPrefix(filename, "file:")
+	filename = strings.TrimSpace(filename)
+	if filename == "" {
+		filename = "mafia-bot.db"
+	}
+
+	absPath, err := filepath.Abs(filename)
+	if err != nil {
+		return "", err
+	}
+	if err = os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+		return "", err
+	}
+
+	if query == "" {
+		return absPath, nil
+	}
+	return absPath + "?" + query, nil
 }
