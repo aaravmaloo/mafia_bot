@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,8 +71,26 @@ func resolveDSN(driver, dsn string) (string, error) {
 		return "", err
 	}
 
-	if query == "" {
+	values, err := url.ParseQuery(query)
+	if err != nil {
+		return "", err
+	}
+	if values.Get("_foreign_keys") == "" {
+		values.Set("_foreign_keys", "on")
+	}
+	if values.Get("_busy_timeout") == "" {
+		values.Set("_busy_timeout", "10000")
+	}
+	if values.Get("_journal_mode") == "" {
+		values.Set("_journal_mode", "WAL")
+	}
+	if values.Get("_synchronous") == "" {
+		values.Set("_synchronous", "NORMAL")
+	}
+
+	encoded := values.Encode()
+	if encoded == "" {
 		return absPath, nil
 	}
-	return absPath + "?" + query, nil
+	return absPath + "?" + encoded, nil
 }

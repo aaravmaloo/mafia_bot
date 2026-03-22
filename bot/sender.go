@@ -40,9 +40,11 @@ func (s *Sender) SendButtons(ctx context.Context, chatJID types.JID, text string
 
 func (s *Sender) DeleteMsg(ctx context.Context, chatJID, senderJID types.JID, messageID types.MessageID) error {
 	log.Printf("delete message chat=%s sender=%s id=%s", chatJID, senderJID, messageID)
-	_, err := s.client.SendMessage(ctx, chatJID, s.client.BuildRevoke(chatJID, senderJID, messageID))
+	resp, err := s.client.SendMessage(ctx, chatJID, s.client.BuildRevoke(chatJID, senderJID, messageID))
 	if err != nil {
 		log.Printf("delete failed chat=%s sender=%s id=%s err=%v", chatJID, senderJID, messageID, err)
+	} else {
+		log.Printf("delete sent chat=%s sender=%s id=%s server_id=%d ts=%s", chatJID, senderJID, messageID, resp.ServerID, resp.Timestamp)
 	}
 	return err
 }
@@ -56,9 +58,11 @@ func (s *Sender) sendText(ctx context.Context, chatJID types.JID, text string) e
 	message := &waProto.Message{
 		Conversation: proto.String(formatBotMessage(body)),
 	}
-	_, err := s.client.SendMessage(ctx, chatJID, message)
+	resp, err := s.client.SendMessage(ctx, chatJID, message)
 	if err != nil {
 		log.Printf("send failed chat=%s err=%v", chatJID, err)
+	} else {
+		log.Printf("send ok chat=%s id=%s server_id=%d ts=%s", chatJID, resp.ID, resp.ServerID, resp.Timestamp)
 	}
 	return err
 }
