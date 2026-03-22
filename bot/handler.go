@@ -51,7 +51,7 @@ func (h *Handler) HandleEvent(evt any) {
 }
 
 func (h *Handler) handleMessage(evt *events.Message) {
-	if evt.Info.IsFromMe || evt.IsEdit || evt.Message == nil {
+	if evt.IsEdit || evt.Message == nil {
 		return
 	}
 
@@ -65,6 +65,9 @@ func (h *Handler) handleMessage(evt *events.Message) {
 
 	text := extractText(evt.Message)
 	if strings.TrimSpace(text) == "" {
+		return
+	}
+	if evt.Info.IsFromMe && strings.HasPrefix(strings.TrimSpace(text), "[*BOT*]:") {
 		return
 	}
 	log.Printf("incoming message chat=%s sender=%s group=%t text=%q", evt.Info.Chat, evt.Info.Sender, evt.Info.IsGroup, text)
