@@ -1,0 +1,4 @@
+.env
+mafia-bot.db
+mafia-bot.db-shm
+mafia-bot.db-wal
