@@ -38,7 +38,7 @@ func main() {
 	sender := bot.NewSender(client.WA)
 	games := game.NewRegistry()
 	router := commands.NewRouter(cfg, groupJID, games, sender)
-	handler := bot.NewHandler(client, sender, router, games, groupJID)
+	handler := bot.NewHandler(client, sender, router, games, groupJID, cfg.Prefix)
 
 	client.WA.AddEventHandler(handler.HandleEvent)
 

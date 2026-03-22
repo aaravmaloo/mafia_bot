@@ -19,9 +19,10 @@ type Handler struct {
 	router          *commands.Router
 	games           *game.Registry
 	allowedGroupKey string
+	commandPrefix   string
 }
 
-func NewHandler(client *Client, sender *Sender, router *commands.Router, games *game.Registry, allowedGroup types.JID) *Handler {
+func NewHandler(client *Client, sender *Sender, router *commands.Router, games *game.Registry, allowedGroup types.JID, commandPrefix string) *Handler {
 	allowedKey := ""
 	if !allowedGroup.IsEmpty() {
 		allowedKey = game.NormalizeJID(allowedGroup)
@@ -33,6 +34,7 @@ func NewHandler(client *Client, sender *Sender, router *commands.Router, games *
 		router:          router,
 		games:           games,
 		allowedGroupKey: allowedKey,
+		commandPrefix:   commandPrefix,
 	}
 }
 
@@ -55,10 +57,8 @@ func (h *Handler) handleMessage(evt *events.Message) {
 		evt = evt.UnwrapRaw()
 	}
 	if evt.Message == nil {
-		log.Printf("message event dropped: no usable message payload chat=%s sender=%s from_me=%t group=%t", evt.Info.Chat, evt.Info.Sender, evt.Info.IsFromMe, evt.Info.IsGroup)
 		return
 	}
-	log.Printf("message event chat=%s sender=%s from_me=%t group=%t id=%s", evt.Info.Chat, evt.Info.Sender, evt.Info.IsFromMe, evt.Info.IsGroup, evt.Info.ID)
 	if evt.IsEdit {
 		return
 	}
@@ -72,14 +72,17 @@ func (h *Handler) handleMessage(evt *events.Message) {
 	}
 
 	text := extractText(evt.Message)
-	if strings.TrimSpace(text) == "" {
-		log.Printf("message event had no text chat=%s sender=%s id=%s", evt.Info.Chat, evt.Info.Sender, evt.Info.ID)
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
 		return
 	}
-	if evt.Info.IsFromMe && strings.HasPrefix(strings.TrimSpace(text), "[*BOT*]:") {
+	if evt.Info.IsFromMe && strings.HasPrefix(trimmed, "[*BOT*]:") {
 		return
 	}
-	log.Printf("incoming message chat=%s sender=%s group=%t text=%q", evt.Info.Chat, evt.Info.Sender, evt.Info.IsGroup, text)
+	if h.commandPrefix != "" && !strings.HasPrefix(trimmed, h.commandPrefix) {
+		return
+	}
+	log.Printf("incoming command chat=%s sender=%s group=%t text=%q", evt.Info.Chat, evt.Info.Sender, evt.Info.IsGroup, trimmed)
 
 	inbound := commands.InboundMessage{
 		ChatJID:          evt.Info.Chat,
@@ -87,7 +90,7 @@ func (h *Handler) handleMessage(evt *events.Message) {
 		SenderAlternates: extractSenderAlternates(evt),
 		MessageID:        evt.Info.ID,
 		PushName:         evt.Info.PushName,
-		Text:             text,
+		Text:             trimmed,
 		IsGroup:          evt.Info.IsGroup,
 		Mentions:         extractMentions(evt.Message),
 	}
