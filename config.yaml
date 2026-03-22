@@ -1,0 +1,11 @@
+group_jid: ""
+prefix: "!"
+min_players: 5
+night_duration: 120s
+day_duration: 5m
+nomination_duration: 60s
+trial_duration: 60s
+voting_duration: 60s
+database_driver: sqlite3
+database_dsn: "file:mafia-bot.db?_foreign_keys=on"
+log_level: INFO
