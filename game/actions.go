@@ -9,10 +9,12 @@ import (
 )
 
 type NightResolution struct {
-	Target      *models.Player
-	Saved       bool
-	Eliminated  *models.Player
-	VoteSummary map[string]int
+	Target           *models.Player
+	Saved            bool
+	SavedBy          *models.Player
+	Eliminated       *models.Player
+	VoteSummary      map[string]int
+	SuccessfulSaveOn *models.Player
 }
 
 type TrialOutcome struct {
@@ -152,10 +154,12 @@ func ProcessNightEnd(state *GameState) NightResolution {
 	}
 
 	saved := false
+	var savedBy *models.Player
 	if targetKey != "" {
-		for _, savedKey := range state.DoctorSaves {
+		for doctorKey, savedKey := range state.DoctorSaves {
 			if savedKey == targetKey {
 				saved = true
+				savedBy = state.Players[doctorKey]
 				break
 			}
 		}
@@ -172,10 +176,12 @@ func ProcessNightEnd(state *GameState) NightResolution {
 	state.resetDayStateLocked()
 
 	return NightResolution{
-		Target:      target,
-		Saved:       saved,
-		Eliminated:  eliminated,
-		VoteSummary: summary,
+		Target:           target,
+		Saved:            saved,
+		SavedBy:          savedBy,
+		Eliminated:       eliminated,
+		VoteSummary:      summary,
+		SuccessfulSaveOn: target,
 	}
 }
 

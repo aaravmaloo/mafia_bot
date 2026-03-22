@@ -300,6 +300,16 @@ func (s *Service) finishNight(ctx context.Context, groupKey string) {
 	} else {
 		log.Printf("night resolved group=%s no target votes=%v", state.Game.GroupJID, resolution.VoteSummary)
 	}
+	if resolution.Saved && resolution.SuccessfulSaveOn != nil {
+		if err := s.messenger.SendDM(ctx, resolution.SuccessfulSaveOn.JID, "You were attacked last night, but the doctor saved you."); err == nil {
+			log.Printf("night dm sent group=%s recipient=%s type=saved-player", state.Game.GroupJID, resolution.SuccessfulSaveOn.Name)
+		}
+		if resolution.SavedBy != nil && !resolution.SavedBy.IsBot {
+			if err := s.messenger.SendDM(ctx, resolution.SavedBy.JID, fmt.Sprintf("Your save on %s worked.", resolution.SuccessfulSaveOn.Name)); err == nil {
+				log.Printf("night dm sent group=%s recipient=%s type=doctor-save-confirm target=%s", state.Game.GroupJID, resolution.SavedBy.Name, resolution.SuccessfulSaveOn.Name)
+			}
+		}
+	}
 	if resolution.Eliminated != nil {
 		if winner := game.CheckWin(state); winner != game.WinnerNone {
 			log.Printf("win condition reached after night group=%s winner=%s", state.Game.GroupJID, winner)
