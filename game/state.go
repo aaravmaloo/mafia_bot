@@ -18,8 +18,9 @@ import (
 var ErrGameAlreadyExists = errors.New("game already exists in this group")
 
 type Registry struct {
-	mu    sync.RWMutex
-	games map[string]*GameState
+	mu          sync.RWMutex
+	games       map[string]*GameState
+	botSettings map[string]bool
 }
 
 type GameState struct {
@@ -28,6 +29,8 @@ type GameState struct {
 	Game      models.Game
 	Players   map[string]*models.Player
 	joinOrder []string
+	botsOn    bool
+	botSeq    int
 
 	MafiaVotes   map[string]string
 	DoctorSaves  map[string]string
@@ -45,7 +48,10 @@ type GameState struct {
 }
 
 func NewRegistry() *Registry {
-	return &Registry{games: make(map[string]*GameState)}
+	return &Registry{
+		games:       make(map[string]*GameState),
+		botSettings: make(map[string]bool),
+	}
 }
 
 func (r *Registry) Create(groupJID, hostJID types.JID) (*GameState, error) {
@@ -58,6 +64,7 @@ func (r *Registry) Create(groupJID, hostJID types.JID) (*GameState, error) {
 	}
 
 	state := NewGameState(groupJID, hostJID)
+	state.botsOn = r.botSettings[key]
 	r.games[key] = state
 	return state, nil
 }
@@ -91,6 +98,18 @@ func (r *Registry) FindByPlayer(playerJID types.JID) *GameState {
 	}
 
 	return nil
+}
+
+func (r *Registry) SetBotsEnabled(groupJID types.JID, enabled bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.botSettings[NormalizeJID(groupJID)] = enabled
+}
+
+func (r *Registry) BotsEnabled(groupJID types.JID) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.botSettings[NormalizeJID(groupJID)]
 }
 
 func NewGameState(groupJID, hostJID types.JID) *GameState {
@@ -134,6 +153,24 @@ func (g *GameState) SetPhase(phase models.Phase) {
 	g.Game.Phase = phase
 }
 
+func (g *GameState) GetTrialTarget() string {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.TrialTarget
+}
+
+func (g *GameState) SetBotsEnabled(enabled bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.botsOn = enabled
+}
+
+func (g *GameState) BotsEnabled() bool {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.botsOn
+}
+
 func (g *GameState) AddPlayer(jid types.JID, name string) (*models.Player, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -156,6 +193,32 @@ func (g *GameState) AddPlayer(jid types.JID, name string) (*models.Player, error
 	g.Players[key] = player
 	g.joinOrder = append(g.joinOrder, key)
 	return player, nil
+}
+
+func (g *GameState) AddBot(name string) *models.Player {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	g.botSeq++
+	jid := types.JID{
+		User:   fmt.Sprintf("bot-%02d", g.botSeq),
+		Server: "bot.local",
+	}
+	key := NormalizeJID(jid)
+	player := &models.Player{
+		JID:   jid,
+		Name:  strings.TrimSpace(name),
+		Alive: true,
+		Phone: jid.User,
+		Role:  models.RoleVillager,
+		IsBot: true,
+	}
+	if player.Name == "" {
+		player.Name = fmt.Sprintf("Bot %d", g.botSeq)
+	}
+	g.Players[key] = player
+	g.joinOrder = append(g.joinOrder, key)
+	return player
 }
 
 func (g *GameState) HasPlayer(jid types.JID) bool {
@@ -185,6 +248,32 @@ func (g *GameState) PlayerCount() int {
 	return len(g.Players)
 }
 
+func (g *GameState) HumanPlayerCount() int {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	count := 0
+	for _, player := range g.Players {
+		if !player.IsBot {
+			count++
+		}
+	}
+	return count
+}
+
+func (g *GameState) BotPlayerCount() int {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	count := 0
+	for _, player := range g.Players {
+		if player.IsBot {
+			count++
+		}
+	}
+	return count
+}
+
 func (g *GameState) JoinedPlayers() []*models.Player {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -192,6 +281,24 @@ func (g *GameState) JoinedPlayers() []*models.Player {
 	players := make([]*models.Player, 0, len(g.joinOrder))
 	for _, key := range g.joinOrder {
 		players = append(players, g.Players[key])
+	}
+	return players
+}
+
+func (g *GameState) BotPlayers(aliveOnly bool) []*models.Player {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	players := make([]*models.Player, 0)
+	for _, key := range g.joinOrder {
+		player := g.Players[key]
+		if !player.IsBot {
+			continue
+		}
+		if aliveOnly && !player.Alive {
+			continue
+		}
+		players = append(players, player)
 	}
 	return players
 }
@@ -427,9 +534,36 @@ func (g *GameState) RevealLines() []string {
 		if !player.Alive {
 			status = "dead"
 		}
-		lines = append(lines, fmt.Sprintf("- %s - %s (%s)", player.Name, player.Role, status))
+		botTag := ""
+		if player.IsBot {
+			botTag = " [bot]"
+		}
+		lines = append(lines, fmt.Sprintf("- %s%s - %s (%s)", player.Name, botTag, player.Role, status))
 	}
 	return lines
+}
+
+func (g *GameState) RemoveBotPlayers() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if g.Game.Phase != models.PhaseLobby {
+		return 0
+	}
+
+	removed := 0
+	nextOrder := make([]string, 0, len(g.joinOrder))
+	for _, key := range g.joinOrder {
+		player := g.Players[key]
+		if player != nil && player.IsBot {
+			delete(g.Players, key)
+			removed++
+			continue
+		}
+		nextOrder = append(nextOrder, key)
+	}
+	g.joinOrder = nextOrder
+	return removed
 }
 
 func fallbackName(name string, jid types.JID) string {

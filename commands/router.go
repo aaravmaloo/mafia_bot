@@ -77,6 +77,8 @@ func (r *Router) HandleMessage(ctx context.Context, msg InboundMessage) {
 	}
 
 	switch cmd.name {
+	case "bots":
+		r.routeBots(ctx, msg, cmd.args)
 	case "startgame":
 		r.routeStartGame(ctx, msg)
 	case "join":
@@ -151,4 +153,8 @@ func (r *Router) lookupPlayerGame(msg InboundMessage) (*game.GameState, *models.
 		return nil, nil
 	}
 	return state, state.GetPlayer(msg.SenderJID)
+}
+
+func formatCommand(prefix, name string) string {
+	return prefix + name
 }

@@ -9,4 +9,5 @@ type Player struct {
 	Alive           bool
 	NightActionDone bool
 	Phone           string
+	IsBot           bool
 }

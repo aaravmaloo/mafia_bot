@@ -23,7 +23,7 @@ func (r *Router) routeKill(ctx context.Context, msg InboundMessage, args string)
 		return
 	}
 	if player.Role != models.RoleMafia {
-		r.replyError(ctx, msg, "Only mafia can use !kill.")
+		r.replyError(ctx, msg, fmt.Sprintf("Only mafia can use %s.", formatCommand(r.cfg.Prefix, "kill")))
 		return
 	}
 
@@ -56,7 +56,7 @@ func (r *Router) routeSave(ctx context.Context, msg InboundMessage, args string)
 		return
 	}
 	if player.Role != models.RoleDoctor {
-		r.replyError(ctx, msg, "Only the doctor can use !save.")
+		r.replyError(ctx, msg, fmt.Sprintf("Only the doctor can use %s.", formatCommand(r.cfg.Prefix, "save")))
 		return
 	}
 
@@ -85,7 +85,7 @@ func (r *Router) routeInvestigate(ctx context.Context, msg InboundMessage, args 
 		return
 	}
 	if player.Role != models.RolePolice {
-		r.replyError(ctx, msg, "Only police can use !investigate.")
+		r.replyError(ctx, msg, fmt.Sprintf("Only police can use %s.", formatCommand(r.cfg.Prefix, "investigate")))
 		return
 	}
 
@@ -254,7 +254,7 @@ func (s *Service) applyBundle(ctx context.Context, state *game.GameState, bundle
 	}
 	for _, dm := range bundle.DMs {
 		player := state.GetPlayerByKey(dm.RecipientKey)
-		if player == nil {
+		if player == nil || player.IsBot {
 			continue
 		}
 		if err := s.messenger.SendDM(ctx, player.JID, dm.Text); err != nil {
@@ -263,6 +263,7 @@ func (s *Service) applyBundle(ctx context.Context, state *game.GameState, bundle
 	}
 
 	s.armTimer(state, bundle)
+	s.queueBotActions(state, bundle.Phase)
 	return nil
 }
 
@@ -309,7 +310,7 @@ func (s *Service) finishNight(ctx context.Context, groupKey string) {
 	}
 
 	log.Printf("phase change group=%s from=%s to=%s", state.Game.GroupJID, models.PhaseNight, models.PhaseDay)
-	_ = s.applyBundle(ctx, state, game.StartDay(state, game.NightSummaryText(resolution), s.cfg.DayDuration))
+	_ = s.applyBundle(ctx, state, game.StartDay(state, game.NightSummaryText(resolution), s.cfg.DayDuration, s.cfg.Prefix))
 }
 
 func (s *Service) finishDay(ctx context.Context, groupKey string) {
@@ -322,7 +323,7 @@ func (s *Service) finishDay(ctx context.Context, groupKey string) {
 	if leader == nil {
 		log.Printf("day ended group=%s without trial", state.Game.GroupJID)
 		_ = s.messenger.SendGroup(ctx, state.Game.GroupJID, "Day ended without a trial. Back to night.")
-		_ = s.applyBundle(ctx, state, game.StartNight(state, s.cfg.NightDuration))
+		_ = s.applyBundle(ctx, state, game.StartNight(state, s.cfg.NightDuration, s.cfg.Prefix))
 		return
 	}
 	log.Printf("trial selected group=%s target=%s", state.Game.GroupJID, leader.Name)
@@ -340,7 +341,7 @@ func (s *Service) finishTrial(ctx context.Context, groupKey string) {
 	}
 
 	log.Printf("phase change group=%s from=%s to=%s", state.Game.GroupJID, models.PhaseTrial, models.PhaseVoting)
-	_ = s.applyBundle(ctx, state, game.StartVoting(state, s.cfg.VotingDuration))
+	_ = s.applyBundle(ctx, state, game.StartVoting(state, s.cfg.VotingDuration, s.cfg.Prefix))
 }
 
 func (s *Service) finishVoting(ctx context.Context, groupKey string) {
@@ -353,7 +354,7 @@ func (s *Service) finishVoting(ctx context.Context, groupKey string) {
 	switch {
 	case outcome.Target == nil:
 		log.Printf("voting ended group=%s with no valid target", state.Game.GroupJID)
-		_ = s.applyBundle(ctx, state, game.StartNight(state, s.cfg.NightDuration))
+		_ = s.applyBundle(ctx, state, game.StartNight(state, s.cfg.NightDuration, s.cfg.Prefix))
 	case outcome.Eliminated:
 		log.Printf("trial result group=%s target=%s guilty=%d not_guilty=%d eliminated=true role=%s", state.Game.GroupJID, outcome.Target.Name, outcome.Guilty, outcome.NotGuilty, outcome.Target.Role)
 		_ = s.messenger.SendGroup(ctx, state.Game.GroupJID, fmt.Sprintf("%s was found guilty and eliminated. They were %s.", outcome.Target.Name, outcome.Target.Role))
@@ -362,11 +363,11 @@ func (s *Service) finishVoting(ctx context.Context, groupKey string) {
 			s.endGame(ctx, state, winner)
 			return
 		}
-		_ = s.applyBundle(ctx, state, game.StartNight(state, s.cfg.NightDuration))
+		_ = s.applyBundle(ctx, state, game.StartNight(state, s.cfg.NightDuration, s.cfg.Prefix))
 	default:
 		log.Printf("trial result group=%s target=%s guilty=%d not_guilty=%d eliminated=false", state.Game.GroupJID, outcome.Target.Name, outcome.Guilty, outcome.NotGuilty)
 		_ = s.messenger.SendGroup(ctx, state.Game.GroupJID, fmt.Sprintf("%s was found not guilty. Night falls again.", outcome.Target.Name))
-		_ = s.applyBundle(ctx, state, game.StartNight(state, s.cfg.NightDuration))
+		_ = s.applyBundle(ctx, state, game.StartNight(state, s.cfg.NightDuration, s.cfg.Prefix))
 	}
 }
 

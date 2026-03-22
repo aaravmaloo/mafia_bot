@@ -20,7 +20,7 @@ type PhaseBundle struct {
 	Duration  time.Duration
 }
 
-func StartNight(state *GameState, duration time.Duration) PhaseBundle {
+func StartNight(state *GameState, duration time.Duration, prefix string) PhaseBundle {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 
@@ -51,12 +51,12 @@ func StartNight(state *GameState, duration time.Duration) PhaseBundle {
 		var text string
 		switch player.Role {
 		case models.RoleMafia:
-			text = "🔪 Night phase! Who do you kill?\n!kill @player"
+			text = fmt.Sprintf("🔪 Night phase! Who do you kill?\n%skill @player", prefix)
 			text += "\nYour team: " + mafiaTeamLine(player.Name, mafiaNames)
 		case models.RoleDoctor:
-			text = "💊 Night phase! Who do you save?\n!save @player"
+			text = fmt.Sprintf("💊 Night phase! Who do you save?\n%ssave @player", prefix)
 		case models.RolePolice:
-			text = "🔍 Night phase! Who do you investigate?\n!investigate @player"
+			text = fmt.Sprintf("🔍 Night phase! Who do you investigate?\n%sinvestigate @player", prefix)
 		default:
 			text = "😴 Go to sleep... (no night action)"
 		}
@@ -67,7 +67,7 @@ func StartNight(state *GameState, duration time.Duration) PhaseBundle {
 	return bundle
 }
 
-func StartDay(state *GameState, opening string, duration time.Duration) PhaseBundle {
+func StartDay(state *GameState, opening string, duration time.Duration, prefix string) PhaseBundle {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 
@@ -75,7 +75,7 @@ func StartDay(state *GameState, opening string, duration time.Duration) PhaseBun
 	state.resetDayStateLocked()
 
 	if strings.TrimSpace(opening) == "" {
-		opening = "☀️ Day phase has started. Debate, accuse, and nominate with !nominate @player."
+		opening = fmt.Sprintf("☀️ Day phase has started. Debate, accuse, and nominate with %snominate @player.", prefix)
 	}
 
 	return PhaseBundle{
@@ -109,7 +109,7 @@ func StartTrial(state *GameState, targetKey string, duration time.Duration) (Pha
 	return bundle, nil
 }
 
-func StartVoting(state *GameState, duration time.Duration) PhaseBundle {
+func StartVoting(state *GameState, duration time.Duration, prefix string) PhaseBundle {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 
@@ -124,7 +124,7 @@ func StartVoting(state *GameState, duration time.Duration) PhaseBundle {
 
 	return PhaseBundle{
 		Phase:     models.PhaseVoting,
-		GroupText: fmt.Sprintf("🗳️ Voting time. Decide %s's fate with !guilty or !notguilty.", name),
+		GroupText: fmt.Sprintf("🗳️ Voting time. Decide %s's fate with %sguilty or %snotguilty.", name, prefix, prefix),
 		Duration:  duration,
 	}
 }

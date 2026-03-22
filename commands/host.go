@@ -30,7 +30,7 @@ func (r *Router) routeJoin(ctx context.Context, msg InboundMessage) {
 
 	state := r.games.Get(msg.ChatJID)
 	if state == nil {
-		r.replyError(ctx, msg, "No lobby is open. Ask the host to use !startgame first.")
+		r.replyError(ctx, msg, fmt.Sprintf("No lobby is open. Ask the host to use %s first.", formatCommand(r.cfg.Prefix, "startgame")))
 		return
 	}
 	if state.Phase() != models.PhaseLobby {
@@ -58,8 +58,23 @@ func (r *Router) routeBegin(ctx context.Context, msg InboundMessage) {
 		return
 	}
 	if state.HostKey() != game.NormalizeJID(msg.SenderJID) {
-		r.replyError(ctx, msg, "Only the host can use !begin.")
+		r.replyError(ctx, msg, fmt.Sprintf("Only the host can use %s.", formatCommand(r.cfg.Prefix, "begin")))
 		return
+	}
+	if state.HumanPlayerCount() == 0 {
+		r.replyError(ctx, msg, "At least one real player needs to join the lobby first.")
+		return
+	}
+	if state.BotsEnabled() && state.PlayerCount() < r.cfg.MinPlayers {
+		added := game.FillBotSeats(state, r.cfg.MinPlayers)
+		if len(added) > 0 {
+			names := make([]string, 0, len(added))
+			for _, player := range added {
+				names = append(names, player.Name)
+			}
+			log.Printf("filled bot seats group=%s added=%v", state.Game.GroupJID, names)
+			_ = r.service.messenger.SendGroup(ctx, state.Game.GroupJID, fmt.Sprintf("Filled %d empty seats with bots: %s", len(added), strings.Join(names, ", ")))
+		}
 	}
 	if state.PlayerCount() < r.cfg.MinPlayers {
 		r.replyError(ctx, msg, fmt.Sprintf("Need at least %d players before the game can begin.", r.cfg.MinPlayers))
@@ -82,7 +97,7 @@ func (r *Router) routeEndGame(ctx context.Context, msg InboundMessage) {
 		return
 	}
 	if state.HostKey() != game.NormalizeJID(msg.SenderJID) {
-		r.replyError(ctx, msg, "Only the host can use !endgame.")
+		r.replyError(ctx, msg, fmt.Sprintf("Only the host can use %s.", formatCommand(r.cfg.Prefix, "endgame")))
 		return
 	}
 
@@ -101,8 +116,9 @@ func (s *Service) StartLobby(ctx context.Context, msg InboundMessage) error {
 	announcement := strings.Join([]string{
 		fmt.Sprintf("🎭 Mafia lobby opened by %s.", nameForDisplay(msg.PushName, msg.SenderJID.User)),
 		fmt.Sprintf("Need at least %d players.", s.cfg.MinPlayers),
-		"Use !join to enter the game.",
-		"Host uses !begin when everyone's in.",
+		fmt.Sprintf("Use %s to enter the game.", formatCommand(s.cfg.Prefix, "join")),
+		fmt.Sprintf("Use %s or %s to toggle bot seats.", formatCommand(s.cfg.Prefix, "bots enable"), formatCommand(s.cfg.Prefix, "bots disable")),
+		fmt.Sprintf("Host uses %s when everyone's in.", formatCommand(s.cfg.Prefix, "begin")),
 	}, "\n")
 
 	return s.applyBundle(ctx, state, game.PhaseBundle{
@@ -132,7 +148,7 @@ func (s *Service) BeginGame(ctx context.Context, state *game.GameState) error {
 
 	for _, dm := range game.RoleRevealMessages(state) {
 		player := state.GetPlayerByKey(dm.RecipientKey)
-		if player == nil {
+		if player == nil || player.IsBot {
 			continue
 		}
 		if err := s.messenger.SendDM(ctx, player.JID, dm.Text); err != nil {
@@ -144,7 +160,7 @@ func (s *Service) BeginGame(ctx context.Context, state *game.GameState) error {
 		return err
 	}
 
-	return s.applyBundle(ctx, state, game.StartNight(state, s.cfg.NightDuration))
+	return s.applyBundle(ctx, state, game.StartNight(state, s.cfg.NightDuration, s.cfg.Prefix))
 }
 
 func (s *Service) ForceEndGame(ctx context.Context, state *game.GameState, reason string) error {
