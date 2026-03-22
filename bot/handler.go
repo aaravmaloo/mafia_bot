@@ -51,7 +51,15 @@ func (h *Handler) HandleEvent(evt any) {
 }
 
 func (h *Handler) handleMessage(evt *events.Message) {
-	if evt.IsEdit || evt.Message == nil {
+	if evt.Message == nil && evt.RawMessage != nil {
+		evt = evt.UnwrapRaw()
+	}
+	if evt.Message == nil {
+		log.Printf("message event dropped: no usable message payload chat=%s sender=%s from_me=%t group=%t", evt.Info.Chat, evt.Info.Sender, evt.Info.IsFromMe, evt.Info.IsGroup)
+		return
+	}
+	log.Printf("message event chat=%s sender=%s from_me=%t group=%t id=%s", evt.Info.Chat, evt.Info.Sender, evt.Info.IsFromMe, evt.Info.IsGroup, evt.Info.ID)
+	if evt.IsEdit {
 		return
 	}
 
@@ -65,6 +73,7 @@ func (h *Handler) handleMessage(evt *events.Message) {
 
 	text := extractText(evt.Message)
 	if strings.TrimSpace(text) == "" {
+		log.Printf("message event had no text chat=%s sender=%s id=%s", evt.Info.Chat, evt.Info.Sender, evt.Info.ID)
 		return
 	}
 	if evt.Info.IsFromMe && strings.HasPrefix(strings.TrimSpace(text), "[*BOT*]:") {
